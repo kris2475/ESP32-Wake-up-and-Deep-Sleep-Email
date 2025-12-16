@@ -6,19 +6,19 @@
 // ===================================
 
 // Wi-Fi Credentials
-#define WIFI_SSID       "SKYYRMR7"              // Your Wi-Fi Network Name
-#define WIFI_PASSWORD   "K2xWvDFZkuCh"          // Your Wi-Fi Password
+#define WIFI_SSID       ""              // Your Wi-Fi Network Name
+#define WIFI_PASSWORD   ""          // Your Wi-Fi Password
 
 // Gmail Sender Configuration (Using App Password)
 #define SMTP_HOST         "smtp.gmail.com"
 #define SMTP_PORT         465                   // SSL (recommended)
-#define SENDER_EMAIL      "data.monitor.bot@gmail.com"
-#define SENDER_PASSWORD   "qznrhhizewhfzrud"    // YOUR 16-CHAR APP PASSWORD
+#define SENDER_EMAIL      ""
+#define SENDER_PASSWORD   ""    // YOUR 16-CHAR APP PASSWORD
 #define SENDER_NAME       "ESP32 Test Alert"
 
 // Recipient Configuration
-#define RECIPIENT_EMAIL   "data.monitor.bot@gmail.com" // Sending alert to the same account
-#define RECIPIENT_NAME    "data.monitor.bot"
+#define RECIPIENT_EMAIL   " // Sending alert to the same account
+#define RECIPIENT_NAME    "
 
 // ===================================
 // 2. GLOBAL VARIABLES & FUNCTION PROTOTYPES
@@ -141,3 +141,4 @@ void smtpCallback(SMTP_Status status) {
   }
   Serial.println("------------------------------------");
 }
+
