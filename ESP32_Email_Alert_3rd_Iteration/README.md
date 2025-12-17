@@ -1,10 +1,13 @@
-# ESP32 Deep Sleep Time-Aligned Logger (10-Minute Interval)
+# ESP32 Deep Sleep Time-Aligned Logger (2-Minute Interval)
 
 ## 📝 Overview
 
-This Arduino sketch runs on an ESP32 microcontroller to periodically read the internal chip temperature and report it via email. The core function of this project is to achieve ultra-low power consumption by utilizing the ESP32's **Deep Sleep** mode while maintaining precise time alignment for data logging.
+This Arduino sketch runs on an ESP32 microcontroller to periodically **read the ESP32’s internal temperature sensor register** and report the result via email. The primary objective of the project is to achieve **ultra-low power operation** using the ESP32’s **Deep Sleep** mode while maintaining **strict alignment to real-world clock boundaries** for data logging.
 
-The system is designed to wake up **exactly on the minute, every 10 minutes** (e.g., `10:00:00`, `10:10:00`, `10:20:00`).
+The system is designed to wake and evaluate logging conditions **exactly on the minute, every 2 minutes** (for example, `10:00:00`, `10:02:00`, `10:04:00`).
+
+> **Important clarification:**  
+> The sketch correctly reads the value returned by the ESP32’s internal temperature sensor on every wake-up. The constant temperature value observed is a **hardware characteristic of the ESP32 internal sensor**, not a software or scheduling error.
 
 ---
 
@@ -12,110 +15,117 @@ The system is designed to wake up **exactly on the minute, every 10 minutes** (e
 
 ### 1. Low-Power Operation (Deep Sleep)
 
-The primary energy-saving mechanism is **Deep Sleep**.
+The primary energy-saving mechanism is the ESP32’s **Deep Sleep** mode.
 
-- The ESP32 is only awake long enough to:
+- The ESP32 is awake only long enough to:
   - Connect to Wi-Fi
-  - Synchronize time
-  - Read the internal temperature sensor
-  - Send an email
+  - Synchronize system time via NTP
+  - Read the internal temperature sensor register
+  - Send an email report
 - Typical active time: **5–10 seconds**
-- Sleep duration: approximately **9 minutes 50 seconds**
-- During Deep Sleep, the main CPU is powered down, reducing current consumption to the **microamp range**
+- Typical sleep duration: approximately **1 minute 50 seconds**
+- During Deep Sleep, the main CPU is powered down and current consumption drops into the **microamp range**
 
-This design makes the system suitable for long-term, battery-powered deployments.
+This design is well-suited for long-term, battery-powered deployments.
 
 ---
 
 ### 2. Precise Time Alignment (NTP Synchronization)
 
-To prevent time drift over hours or days, the system relies on the **Network Time Protocol (NTP)**.
+To prevent long-term drift, the system relies on **Network Time Protocol (NTP)** synchronization rather than free-running timers.
 
-**Process flow:**
+**Execution flow:**
 
 1. **Wake-up**  
-   The ESP32 wakes using its internal hardware timer.
+   The ESP32 wakes via its internal RTC timer.
 
 2. **Time Synchronization**  
-   It immediately connects to Wi-Fi and synchronizes its internal clock with an NTP server.
+   It connects to Wi-Fi and synchronizes its clock with an NTP server.
 
-3. **Calculation**  
-   The code calculates the exact number of seconds remaining until the next official 10-minute boundary (e.g., `10:10:00`).
+3. **Boundary Calculation**  
+   The firmware calculates the number of seconds remaining until the next official 2-minute boundary (for example, `10:02:00`).
 
 4. **Re-Scheduling**  
-   The hardware sleep timer is programmed using this calculated duration.
+   Deep Sleep is re-entered with a timer duration computed from the current wall-clock time.
 
-This guarantees that log timestamps remain aligned with real-world clock time, regardless of:
-- Minor hardware timer inaccuracies
-- Variable Wi-Fi connection or email transmission delays
+This approach keeps log timestamps aligned with real-world time, compensating for:
+- RTC drift
+- Variable Wi-Fi connection times
+- Email transmission latency
 
 ---
 
 ### 3. Schedule Persistence (RTC Memory)
 
-The sketch uses `RTC_DATA_ATTR` to store variables that persist across Deep Sleep cycles.
+The sketch uses `RTC_DATA_ATTR` to preserve scheduling state across Deep Sleep cycles.
 
-**Persistent variables:**
+**Persistent variables include:**
 
 - `nextCaptureTime`  
-  Stores the timestamp of the next intended logging event (e.g., `10:10:00`).
+  Stores the absolute timestamp of the next intended log event.
 
 - `initialTimeSet`  
-  A boolean flag that ensures the schedule is initialized **only on first boot or firmware upload**.
+  Ensures that the logging schedule is initialized **only once**, on first boot or after firmware upload.
 
-This prevents the logging schedule from being reset or corrupted on every wake-up cycle.
+This prevents re-alignment or schedule reset on every wake-up.
 
 ---
 
-## ⚠️ The Flaw in Timing (Scheduling Overrun)
+## 🌡 Internal Temperature Sensor Behavior (Expected)
 
-Despite the precise design, a subtle flaw exists in the scheduling logic, observable in log sequences such as:
+The sketch reads the ESP32’s internal temperature sensor using `temprature_sens_read()`.
 
-09:59
-10:00
+- The function **does perform a fresh hardware register read on every wake-up**
+- The returned value is **not cached** by the firmware
+- The conversion logic is correct
 
-pgsql
-Copy code
+However:
 
-### Cause of the Flaw: Critical Boundary Condition
+- The ESP32 internal temperature sensor is **not calibrated**
+- It has **very low resolution**
+- On many chips it returns a nearly constant raw value (commonly 128 °F ≈ 53.33 °C)
 
-The issue occurs when the time spent performing operations pushes execution past a scheduling boundary.
+As a result:
+- The repeated temperature value reflects **actual hardware output**
+- The behavior does **not** indicate a stuck function, frozen code path, or scheduling error
+- Absolute temperature values from this sensor are not meaningful
 
-**Example scenario:**
+---
+
+## ⚠️ Timing Edge Case: Boundary Overrun
+
+Although the overall scheduling approach is sound, a known **edge condition** exists near time boundaries.
+
+### Example Scenario
 
 1. **Scheduled Wake-Up**  
-   The ESP32 wakes targeting `09:50:00`.
+   Target wake-up: `10:00:00`
 
-2. **Email Processing Delay**  
-   Wi-Fi connection and email transmission take approximately **5 seconds**.
+2. **Execution Delay**  
+   Wi-Fi connection and email transmission take ~5 seconds.
 
-3. **Current Time After Processing**  
-   Time is now `09:50:05`.
+3. **Post-Processing Time**  
+   Current time becomes `10:00:05`.
 
-4. **Next Target Calculation**  
-   The code computes the next 10-minute mark based on the current time, resulting in `10:00:00`.
+4. **Next Boundary Calculation**  
+   The next 2-minute boundary is computed as `10:02:00`.
 
-5. **Sleep Duration**  
-   The ESP32 sleeps until approximately `10:00:00`.
+5. **Deep Sleep Entry**  
+   The ESP32 sleeps until approximately `10:02:00`.
 
-6. **Wake and Sync**  
-   Upon waking and syncing via NTP, the actual time may be `10:00:01`.
+6. **Wake-Up and NTP Sync**  
+   Actual time after sync may be `10:02:01`.
 
-7. **Double Log Trigger**  
-   Because the system logs when the current time is **greater than or equal to** the scheduled target, the condition is immediately met again, triggering another email at `10:00`.
-
----
-
-### Summary of the Issue
-
-- The system strictly enforces **real-world time boundaries**
-- Small execution delays can push the clock **past the next scheduled interval**
-- This results in **two logs firing back-to-back** instead of a full 10-minute sleep cycle
-
-This behavior is **not a failure of the Deep Sleep timer**. It is a side effect of using NTP-synchronized wall-clock time combined with boundary-based scheduling logic.
+7. **Immediate Log Trigger**  
+   Because the logging condition allows execution when  
+   `currentTime >= nextCaptureTime`, a second log can be triggered immediately.
 
 ---
 
-## 📌 Conclusion
+## Conclusion
 
-This project demonstrates a highly efficient, time-accurate, low-power logging architecture using the ES
+- The firmware **functions correctly in principle**
+- Deep Sleep, RTC persistence, and NTP alignment behave as designed
+- The constant temperature reading reflects **ESP32 hardware limitations**, not a coding error
+- The observed scheduling edge case is a natural consequence of strict boundary alignment combined with variable execution time
+
