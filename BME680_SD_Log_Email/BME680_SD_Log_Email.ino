@@ -10,14 +10,14 @@
 // ===================================
 // 1. CONFIGURATION
 // ===================================
-#define WIFI_SSID       "SKYYRMR7"
-#define WIFI_PASSWORD   "K2xWvDFZkuCh"
+#define WIFI_SSID       ""
+#define WIFI_PASSWORD   ""
 
 #define SMTP_HOST       "smtp.gmail.com"
 #define SMTP_PORT       465 
-#define SENDER_EMAIL    "data.monitor.bot@gmail.com"
-#define SENDER_PASSWORD "qznrhhizewhfzrud"
-#define RECIPIENT_EMAIL "data.monitor.bot@gmail.com"
+#define SENDER_EMAIL    ""
+#define SENDER_PASSWORD ""
+#define RECIPIENT_EMAIL ""
 
 // AeroGuard Hardware Pins
 #define SD_CS_PIN       5
